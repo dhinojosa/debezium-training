@@ -1,78 +1,74 @@
-== Introduction to Main
+# Debezium For Postgres
 
-=== Bullet List
+## Logical Decoding
 
-* Main is an open source end-to-end test runner
-* Main is a JavaScript Alternative to Java's Selenium
+* Mechanism that allows the extraction of the changes that were committed to the transaction log and the 
+processing of these changes in a user-friendly manner
+* Uses Output Plug-in = enabling clients to consume the changes
 
-[.columns]
-=== Multicolumn
-[.column]
---
-* One
-* Two
-* Three
---
+## Replication Slot
 
-[.column]
---
-* Four
-* Five
---
+* A Replication Slot is a bookmark in the WAL (Write-Ahead Log) 
+that guarantees the database will not delete WAL segments until a particular consumer
+(replica or CDC tool) has read them.
+* It uses either of the two plugins
+** decoderbufs - based on Protobuf and used by Debeezium
+** pgoutput Standard for PSQL 10 +
 
-=== View Table
+The connector produces a change event for every row-level insert, update, and delete operation
 
-[cols="6a*", options="header", stripes="even"]
-|===
-|Subdomain type|	Competitive advantage|	Complexity	|Volatility	 |Implementation	| Problem
-|Core	       | Yes  | High	| High	  | In-house	                                | Interesting
-|Generic	   | No	  | High	| Low	  | Buy/adopt	                                | Solved
-|Supporting	   | No	  | Low	    |  Low	  | In-house/outsource                           | Obvious
-|===
+# What a replication slot does
 
-=== Some code
+* When a slot is active, Postgres::
+	.	Tracks where the subscriber is in the WAL stream.
+	.	Prevents removal of WAL segments older than that position.
+	.	Ensures no data loss for that subscriber.
 
-[source, sh, subs="attributes,quotes,verbatim"]
+## WAL
+
+* Write Ahead Log is a sequential log where PostgreSQL records all changes made to the database before they are written to the actual tables on disk.
+* PostgreSQL normally purges write-ahead log (WAL) segments after some period of time
+* it starts by performing a consistent snapshot of each of the database schemas.
+* After the connector completes the snapshot, it continues streaming changes from the exact point at which the snapshot was made.
+* This way, the connector starts with a consistent view of all of the data, and does not omit any changes that were made while the snapshot was being taken.
+
+* The connector is tolerant of failures. 
+* As the connector reads changes and produces events, it records the WAL position for each event. 
+* If the connector stops for any reason (including communication failures, network problems, or crashes), upon restart the connector continues reading the WAL where it last left off. This includes snapshots. If the connector stops during a snapshot, the connector begins a new snapshot when it restarts.
+
+## LSN Log Sequence Number
+
+* It is the byte offset inside PostgreSQL’s WAL (Write-Ahead Log).
+* Think of the WAL as a giant append-only file, and an LSN is the pointer to a specific position in that file.
+
 ----
-$ yes, code!
+0/16B6C50
+0/1702D80
+0/1702F18
 ----
 
-=== Images
+## Debezium Server
 
-image::stop.png[]
+* The Debezium server is a configurable, ready-to-use application that streams change events 
+from a source database to a variety of messaging infrastructures. 
 
-=== Attribution
+## Debezium Engine
 
-* One
-* Two
-* Three
+* An alternative way for using the Debezium connectors is the Debezium engine.
+* Debezium will not be run via Kafka Connect, but as a library embedded into your custom Java applications.
 
-[.listingblock]
---
-Source: Some Book
---
+## Debezium Features
 
-=== Quote
+* Ensures that all data changes are captured.
+* Produces change events with a very low delay while avoiding increased CPU usage required for frequent polling. For example, for MySQL or PostgreSQL, the delay is in the millisecond range.
+* Requires no changes to your data model, such as a `Last Updated` column.
+* Can capture deletes.
+* Can capture old record state and additional metadata such as transaction ID and causing query, depending on the database’s capabilities and configuration.
 
-.Bob Box, Some Event, 2022
-____
-"Models shouldn’t necessarily be big or small. Models need to be useful."
-____
+## Debezium Capabilities
 
-=== Keyboard & Menu & Button
-
-* Hit kbd:[CTRL+A]
-* Go to menu:File[Save > As PDF]
-* Press btn:[OK]
-
-=== Admonitions
-
-NOTE: This is a note
-
-TIP: This is a tip
-
-IMPORTANT: This is important
-
-CAUTION: This is a caution
-
-WARNING: This is a warning
+* *Snapshots:* optionally, an initial snapshot of a database’s current state can be taken if a connector is started and not all logs still exist. Typically, this is the case when the database has been running for some time and has discarded transaction logs that are no longer needed for transaction recovery or replication. There are different modes for performing snapshots, including support for incremental snapshots, which can be triggered at connector runtime. For more details, see the documentation for the connector that you are using.
+* *Filters:* you can configure the set of captured schemas, tables and columns with include/exclude list filters.
+* *Masking:* the values from specific columns can be masked, for example, when they contain sensitive data.
+* *Monitoring:* most connectors can be monitored by using JMX.
+* *Transformations:* for message routing
